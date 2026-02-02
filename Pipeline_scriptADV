@@ -1,0 +1,74 @@
+pipeline {
+    agent any
+
+    environment {
+        scannerHome = tool "mysonar"
+    }
+
+    stages {
+        stage('cleanWS') {
+            steps {
+                cleanWs()
+            }
+        }
+
+        stage('code checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/Nvm-734/Zomato-Repo.git'
+            }
+        }
+
+        stage('CQA') {
+            steps {
+                withSonarQubeEnv('mysonar') {
+                    sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=swiggy"
+                }
+            }
+        }
+
+        stage('build') {
+            steps {
+                sh "docker build -t image1 ."
+            }
+        }
+
+        stage('scan') {
+            steps {
+                sh "trivy image image1"
+            }
+        }
+
+        stage('tag') {
+            steps {
+                sh "docker tag image1 nandish9494/myrepo:zomato"
+            }
+        }
+
+        stage('run container') {
+            steps {
+                sh """
+                docker stop zomatonnew || true
+                docker rm zomatonnew || true
+                docker run -d --name zomatonnew image1
+                """
+            }
+        }
+
+        stage('push') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'Jenkins-Docker', toolName: 'docker') {
+                        sh "docker push nandish9494/myrepo:zomato"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "Cleaning up container..."
+            sh "docker rm -f zomatonnew || true"
+        }
+    }
+}
